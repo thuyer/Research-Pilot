@@ -1,0 +1,42 @@
+[
+  {
+    "id": "case_001_lr_recovery",
+    "prompt": "请诊断并运行 experiment_repo/train.py。第一次必须显式传入 lr=0.1。请根据实验输出判断是否需要调整参数；如果需要，请自行选择一组合理的新参数进行验证，成功后立即停止，不要做额外的边界实验。",
+    "expected_runs": [
+      {
+        "script_path": "experiment_repo/train.py",
+        "params": {"lr": 0.1},
+        "status": "completed",
+        "stdout_contains": ["nan"]
+      },
+      {
+        "script_path": "experiment_repo/train.py",
+        "status": "completed",
+        "stdout_not_contains": ["nan"],
+        "param_relations": {"lr": "lt_previous"}
+      }
+    ]
+  },
+  {
+    "id": "case_002_lr_normal",
+    "prompt": "请运行 experiment_repo/train.py，必须使用参数 lr=0.001。观察实验结果；如果训练正常，请立即总结并停止，不要重复运行或尝试其他参数。",
+    "expected_runs": [
+      {
+        "script_path": "experiment_repo/train.py",
+        "params": {"lr": 0.001},
+        "status": "completed",
+        "stdout_not_contains": ["nan"]
+      }
+    ]
+  },
+  {
+    "id": "case_003_invalid_path",
+    "prompt": "请运行 experiment_repo/non_existing_train.py 脚本，并根据工具返回结果说明问题。确认脚本不存在后立即停止，不要重复运行其他脚本。",
+    "expected_runs": [
+      {
+        "script_path": "experiment_repo/non_existing_train.py",
+        "status": "rejected"
+      }
+    ]
+  }
+]
