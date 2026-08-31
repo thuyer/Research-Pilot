@@ -1,0 +1,43 @@
+{
+  "task_id": "3b3d3de0cce444cf8b68642823dde840",
+  "user_prompt": "请诊断并运行 experiment_repo/train.py",
+  "title": "train_lr_divergence_diagnosis",
+  "script_path": "experiment_repo/train.py",
+  "target_metric": "loss",
+  "metric_direction": "min",
+  "runs": [
+    {
+      "run_id": "3b8e57636db34f7a84fcf34414240064",
+      "params": {
+        "lr": 0.1,
+        "batch_size": 32
+      },
+      "metrics": {}
+    },
+    {
+      "run_id": "847d8b70dd1d42d6985fa8dd2296f845",
+      "params": {
+        "lr": 0.001,
+        "batch_size": 32
+      },
+      "metrics": {
+        "loss": 1.0
+      }
+    }
+  ],
+  "failure_history": [
+    {
+      "run_id": "3b8e57636db34f7a84fcf34414240064",
+      "params": {
+        "lr": 0.1,
+        "batch_size": 32
+      },
+      "failure_type": "nan_or_inf",
+      "reason": "Loss contains NaN values"
+    }
+  ],
+  "best_run_id": "847d8b70dd1d42d6985fa8dd2296f845",
+  "best_metric_value": 1.0,
+  "attempt_count": 2,
+  "updated_at": "2026-08-31 03:23:24"
+}

@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -16,6 +17,7 @@ os.chdir(PROJECT_ROOT)
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from core import loop
+import state_manager
 
 
 def load_cases(path: Path) -> list[dict]:
@@ -42,15 +44,19 @@ def run_single_case(case: dict) -> dict:
     started_at = time.perf_counter()
     agent_result = None
     error_message = None
+    task_id = uuid.uuid4().hex
+    initial_state = state_manager.init_state(task_id, case["prompt"])
 
     try:
         # Only the public task prompt is sent to the Agent.
-        agent_result = loop(case["prompt"])
+        state_manager.save_state(initial_state)
+        agent_result = loop(case["prompt"], state=initial_state)
     except Exception as error:
         error_message = str(error)
 
     return {
         "case_id": case["id"],
+        "task_id": task_id,
         "agent_result": agent_result,
         "elapsed_seconds": time.perf_counter() - started_at,
         "error_message": error_message,
@@ -119,8 +125,9 @@ def check_run_rule(
     if expected_status and result.get("status") != expected_status:
         return f"status is {result.get('status')!r}, expected {expected_status!r}"
 
+    output_text = result.get("stdout_tail", result.get("std_output", ""))
     keyword_error = check_keywords(
-        result.get("std_output", ""),
+        output_text,
         rule.get("stdout_contains", []),
         rule.get("stdout_not_contains", []),
     )
@@ -141,6 +148,89 @@ def check_run_rule(
                     return f"parameter {name!r} must be smaller than the previous value"
             else:
                 return f"unsupported parameter relation: {relation!r}"
+
+    return None
+
+
+def check_state_consistency(state: dict, actual_runs: list[dict]) -> str | None:
+    """Check that the persisted task state reflects the observed experiment calls."""
+    task_id = state.get("task_id")
+    if not isinstance(task_id, str) or not task_id:
+        return "state.task_id is missing"
+
+    if state.get("attempt_count") != len(actual_runs):
+        return (
+            f"state.attempt_count is {state.get('attempt_count')!r}, "
+            f"but observed {len(actual_runs)} experiment calls"
+        )
+
+    state_runs = state.get("runs")
+    if not isinstance(state_runs, list):
+        return "state.runs is not a list"
+
+    if len(state_runs) != len(actual_runs):
+        return (
+            f"state.runs contains {len(state_runs)} records, "
+            f"but observed {len(actual_runs)} experiment calls"
+        )
+
+    state_run_ids = {
+        run.get("run_id")
+        for run in state_runs
+        if isinstance(run, dict)
+    }
+
+    for call in actual_runs:
+        result = normalize_tool_result(call)
+        if result is None:
+            continue
+        run_id = result.get("run_id")
+        if run_id not in state_run_ids:
+            return f"run_id {run_id!r} is missing from state.runs"
+
+        is_failure = (
+            result.get("status") != "completed"
+            or result.get("failure_type") is not None
+            or result.get("outcome") == "failed"
+        )
+        if is_failure:
+            failure_ids = {
+                item.get("run_id")
+                for item in state.get("failure_history", [])
+                if isinstance(item, dict)
+            }
+            if run_id not in failure_ids:
+                return f"failed run_id {run_id!r} is missing from failure_history"
+
+    metric_name = state.get("target_metric")
+    direction = state.get("metric_direction")
+    candidates = []
+    if metric_name and direction in {"min", "max"}:
+        for run in state_runs:
+            metrics = run.get("metrics", {})
+            value = metrics.get(metric_name) if isinstance(metrics, dict) else None
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                candidates.append((run.get("run_id"), value))
+
+    best_run_id = state.get("best_run_id")
+    best_value = state.get("best_metric_value")
+    if candidates:
+        expected_value = (
+            min(value for _, value in candidates)
+            if direction == "min"
+            else max(value for _, value in candidates)
+        )
+        expected_ids = {
+            run_id for run_id, value in candidates if value == expected_value
+        }
+        if best_run_id not in expected_ids or best_value != expected_value:
+            return (
+                f"best state is inconsistent: run_id={best_run_id!r}, "
+                f"value={best_value!r}, expected one of {expected_ids!r} "
+                f"with value {expected_value!r}"
+            )
+    elif best_run_id is not None or best_value is not None:
+        return "state has best run information but no comparable metric"
 
     return None
 
@@ -167,6 +257,16 @@ def evaluate_case(case: dict, agent_result: dict | None) -> dict:
     actual_runs = extract_run_calls(tool_trace)
     expected_runs = case["expected_runs"]
 
+    final_state = agent_result.get("state")
+    if not isinstance(final_state, dict):
+        return {
+            "case_id": case["id"],
+            "passed": False,
+            "reason": "Agent result has no valid final state.",
+            "experiment_count": len(actual_runs),
+            "tool_call_count": len(tool_trace),
+        }
+
     if len(actual_runs) != len(expected_runs):
         return {
             "case_id": case["id"],
@@ -175,6 +275,16 @@ def evaluate_case(case: dict, agent_result: dict | None) -> dict:
                 f"Expected {len(expected_runs)} experiment runs, "
                 f"but observed {len(actual_runs)}."
             ),
+            "experiment_count": len(actual_runs),
+            "tool_call_count": len(tool_trace),
+        }
+
+    state_error = check_state_consistency(final_state, actual_runs)
+    if state_error:
+        return {
+            "case_id": case["id"],
+            "passed": False,
+            "reason": f"State consistency check failed: {state_error}",
             "experiment_count": len(actual_runs),
             "tool_call_count": len(tool_trace),
         }
@@ -207,6 +317,7 @@ def evaluate_case(case: dict, agent_result: dict | None) -> dict:
         "experiment_count": len(actual_runs),
         "tool_call_count": len(tool_trace),
         "stopped_reason": agent_result.get("stopped_reason"),
+        "task_id": final_state.get("task_id"),
     }
 
 

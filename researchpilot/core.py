@@ -11,6 +11,10 @@ from datetime import datetime
 
 load_dotenv()  # 读取 .env 文件
 
+from extractor.experiment_extractor import extract_experiment_summary
+import state_manager
+from hooks import AgentHooks
+
 # 初始化 OpenAI 客户端
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
@@ -22,10 +26,10 @@ SYSTEM = """
 You are ResearchPilot, an LLM research experiment assistant.
 Follow this workflow for each user task:
 1. Inspect only the requested experiment script first.
-2. Run the experiment with the user's initial parameters.
+2. Run the experiment with the user's initial parameters.You must call set_task_context before calling run_experiment.
 3. Base any next experiment on the returned result from the immediately previous run.
 4. Do not read README files, training documents, or unrelated files unless the requested script is insufficient.
-5. Do not load historical experiment records unless the user explicitly asks for historical comparison.
+5. Use the injected task state (if available) to avoid repeated mistakes, but do not search external history unless asked.
 6. Stop as soon as the requested experiment succeeds or the problem is diagnosed.
 Do not modify files automatically.
 """
@@ -74,6 +78,36 @@ tools = [
     },
     {
         "type": "function",
+        "function": {
+            "name": "set_task_context",
+            "description": "Set the context information for the current tuning task, including the target script, metric to optimize, and optimization direction. IMPORTANT: This function MUST be called BEFORE running any experiments via run_experiment.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "script_path": {
+                        "type": "string",
+                        "description": "Path to the main execution script to be tuned, e.g., 'train.py' or 'scripts/eval.py'."
+                    },
+                    "target_metric": {
+                        "type": "string",
+                        "description": "Name of the core evaluation metric to optimize, e.g., 'accuracy', 'loss', or 'f1_score'."
+                    },
+                    "metric_direction": {
+                        "type": "string",
+                        "enum": ["max", "min"],
+                        "description": "Optimization direction for the metric: 'max' for higher is better (e.g., accuracy), 'min' for lower is better (e.g., loss)."
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "A concise title or description for the current tuning task, e.g., 'resnet50_cifar10_tuning'."
+                    }
+                },
+            "required": ["script_path", "target_metric", "metric_direction", "title"]
+            }
+        }
+    },
+    {
+        "type": "function",
         "function":{
             "name": "search_code",
             "description": "Search for exact string keywords across code files in the project.",
@@ -93,31 +127,7 @@ tools = [
             },
         }     
     },
-    {
-        "type": "function",
-        "function":{
-            "name": "run_experiment",
-            "description": "Execute a Python experiment script under 'experiment_repo' directory and capture output logs.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "script_path": {
-                        "type": "string",
-                        "description": "Relative path of the Python script under experiment_repo (e.g., 'experiment_repo/train.py')."
-                    },
-                    "args": {
-                        "type": "object",
-                        "description": "Key-value dictionary of command-line arguments to pass to the script, e.g., {'lr': 0.001, 'batch_size': 32}."
-                    },
-                    "timeout_seconds": {
-                        "type": "integer",
-                        "description": "Execution timeout in seconds. Defaults to 120."
-                    },
-                },
-                "required": ["script_path"],
-            },
-        }     
-    },
+
     {
         "type": "function",
         "function":{
@@ -133,6 +143,31 @@ tools = [
                     "limit": {
                         "type": "integer",
                         "description": "Maximum number of records to return. Defaults to 50."
+                    }
+                },
+                "required": ["script_path"]
+            },
+        }     
+    },
+    {
+        "type": "function",
+        "function":{
+            "name": "run_experiment",
+            "description": "Execute an experiment script and return its execution result.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "script_path": {
+                        "type": "string",
+                        "description": "Relative path of the Python experiment script under experiment_repo (e.g., 'experiment_repo/train.py')."
+                    },
+                    "args": {
+                        "type": "object",
+                        "description": " A dictionary of hyperparameter arguments for the experiment script, e.g., {'lr': 0.001, 'batch_size': 32}. "
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Maximum time allowed for the experiment in seconds."
                     }
                 },
                 "required": ["script_path"]
@@ -331,15 +366,20 @@ def save_experiment_log(data: dict):
         f.write("\n")
 
 
-def run_experiment(script_path: str, args: dict = None, timeout_seconds: int = 120):
+def run_experiment(
+    script_path: str, 
+    args: dict = None, 
+    timeout_seconds: int = 120, 
+) -> dict:         
     """
-    Run the experiment, and return the result and log it to the log file.
+    Run the experiment script, log the output to a log file, and return the execution results.
+
     Args:
         script_path: The path of the experiment script to run.
-        args: The arguments dict to run the experiment script. Such as {"lr": 0.001, "batch_size": 32}
-        timeout_seconds: The timeout for the experiment.
+        args: A dictionary of hyperparameter arguments for the experiment script, e.g., {"lr": 0.001, "batch_size": 32}.
+        timeout_seconds: Maximum time allowed for the experiment in seconds.
     Returns:
-        dict: The result data  of the experiment.
+        dict: The result data dictionary of the experiment.
     """
     run_id = uuid.uuid4().hex
     result_data = {
@@ -348,52 +388,57 @@ def run_experiment(script_path: str, args: dict = None, timeout_seconds: int = 1
         "params": args,
         "status": "unknown",
         "exit_code": -1,
-        "std_output": "",
-        "std_error":"",
+        "metrics": {},
+        "outcome": "unknown",
+        "failure_type": None,
+        "failure_reason": None,
+        "stdout_tail": "",
         "created_time": datetime.now().isoformat(),
         "elapsed_time": 0.0
     }
 
     try:
-        script_path = script_path.strip()  # Remove any leading/trailing whitespace
-        target_path = SAFE_ROOT / script_path.lstrip("/")
-        target_path = target_path.resolve()
+        script_path_clean = str(script_path).strip().lstrip("/")
+        target_path = (SAFE_ROOT / script_path_clean).resolve()
 
-        if SAFE_ROOT not in target_path.parents and target_path != SAFE_ROOT:
+        if EXPERIMENT_DIR not in target_path.parents and target_path != EXPERIMENT_DIR:
             result_data["status"] = "rejected"
-            result_data["std_error"] = "The file is out of SAFE_ROOT."
-            save_experiment_log(result_data)
-            return result_data
-        if EXPERIMENT_DIR not in target_path.parents:
-            result_data["status"] = "rejected"
-            result_data["std_error"] = "The file is out of EXPERIMENT_DIR."
+            result_data["failure_reason"] = "File is outside EXPERIMENT_DIR."
             save_experiment_log(result_data)
             return result_data
         if not target_path.exists():
             result_data["status"] = "rejected"
-            result_data["std_error"] = "The file doesn't exit."
+            result_data["failure_reason"] = "The file doesn't exit."
             save_experiment_log(result_data)
             return result_data
         if not target_path.is_file():
             result_data["status"] = "rejected"
-            result_data["std_error"] = "This script_path is not to a file."
+            result_data["failure_reason"] = "This script_path is not to a file."
             save_experiment_log(result_data)
             return result_data
         if target_path.suffix != ".py":
             result_data["status"] = "rejected"
-            result_data["std_error"] = "Only support the script of python.This isn't a python script."
+            result_data["failure_reason"] = "Only support the script of python.This isn't a python script."
             save_experiment_log(result_data)
             return result_data
-        
 
-        cli_args = params_to_args(args) if args else []
-        cmd = []
-        cmd.append(sys.executable)  
-        cmd.append(target_path)     
-        cmd.extend(cli_args)
+    except Exception as e:
+        result_data["status"] = "error"
+        result_data["failure_reason"] = f"Unexpected error occurred: {e}"
+        save_experiment_log(result_data)
+        return result_data
+    
+    
+    cli_args = params_to_args(args) if args else []
+    cmd = []
+    cmd.append(sys.executable)  
+    cmd.append(str(target_path))     
+    cmd.extend(cli_args)
 
+    start_time = time.time()
+    stdout_text, stderr_text = "", ""
+    try:
         # Run the command using subprocess
-        start_time = time.time()
         result = subprocess.run(
             cmd,
             shell=False,
@@ -402,25 +447,50 @@ def run_experiment(script_path: str, args: dict = None, timeout_seconds: int = 1
             timeout=timeout_seconds
         )
         end_time = time.time()
-        
-        result_data["params"] = args
-        result_data["elapsed_time"] = end_time - start_time
+        result_data["elapsed_time"] = round(end_time - start_time, 2)
         result_data["status"] = "completed" if result.returncode == 0 else "failed"
-        result_data["exit_code"] = result.returncode        
-        if result.stdout:
-            result_data["std_output"] = result.stdout.strip()[-1000:]
-        if result.stderr:
-            result_data["std_error"] = result.stderr.strip()[-1000:]
-
-    except subprocess.TimeoutExpired:
+        result_data["exit_code"] = result.returncode
+        stdout_text = result.stdout or ""
+        stderr_text = result.stderr or ""
+  
+    except subprocess.TimeoutExpired as e:
         end_time = time.time()
+        stdout_text = e.stdout or "" if isinstance(e.stdout, str) else ""
+        stderr_text = (e.stderr or "") + "\nExecution Timed Out."
+        result_data["elapsed_time"] = round(end_time - start_time, 2)
+        result_data["exit_code"] = -1
         result_data["status"] = "timeout"
-        result_data["elapsed_time"] = end_time - start_time
-        
+        result_data["failure_type"] = "timeout"
     except Exception as e:
+        end_time = time.time()
+        stderr_text = f"Subprocess execution error: {str(e)}"
+        result_data["elapsed_time"] = round(end_time - start_time, 2)
+        result_data["exit_code"] = -1
         result_data["status"] = "error"
-        result_data["std_error"] = f"Unexpected error occurred: {e}"
+        result_data["failure_type"] = "execution_error"
     
+    summary = extract_experiment_summary(
+        raw_execute_result={
+            "params": args,
+            "stdout": stdout_text,
+            "stderr": stderr_text,
+            "status": result_data["status"]
+        }
+    )  
+    result_data["outcome"] = summary.get("outcome", "unknown") # "success" | "failed"
+    result_data["metrics"] = summary.get("metrics", {})  # {"final_loss": 0.08}
+
+    if summary.get("failure_type"):
+        result_data["failure_type"] = summary.get("failure_type")
+    
+    extracted_reason = summary.get("failure_reason")
+    if extracted_reason:
+        result_data["failure_reason"] = extracted_reason
+    elif result_data["status"] in ["timeout", "error"]:
+        result_data["failure_reason"] = stderr_text
+    raw_logs = stdout_text if stdout_text else stderr_text
+    result_data["stdout_tail"] = raw_logs[-300:] if raw_logs else ""
+
     save_experiment_log(result_data)
     return result_data
 
@@ -453,15 +523,19 @@ def load_experiment_records(script_path: str, limit: int = 50):
 
                     line = json.loads(line)
                     if line.get("script_path") == script_path:
-                        record_data = {
+                        result_data = {
                             "run_id": line.get("run_id", ""),
+                            "script_path": line.get("script_path"),
+                            "params": line.get("params", {}),
                             "status": line.get("status", "unknown"),
                             "exit_code": line.get("exit_code", -1),
-                            "std_output": line.get("std_output", ""),
-                            "std_error": line.get("std_error", ""),
-                            "elapsed_time": line.get("elapsed_time", ""),
-                            "params": line.get("params", {}),
-                            "created_time": line.get("created_time", "")
+                            "metrics": line.get("metrics", {}),
+                            "outcome": line.get("outcome", "unknown"),
+                            "failure_type": line.get("failure_type", None),
+                            "failure_reason": line.get("failure_reason", None),
+                            "stdout_tail": line.get("stdout_tail", ""),
+                            "created_time": line.get("created_time", ""),
+                            "elapsed_time": line.get("elapsed_time", 0.0)
                         }
                         matched_record.append(record_data)
                 except json.JSONDecodeError as e:
@@ -486,11 +560,14 @@ TOOL_HANDLERS = {
     "list_files": list_files,
     "read_file": read_file,
     "search_code": search_code,
-    "run_experiment": run_experiment,
-    "load_experiment_records":load_experiment_records
+    "set_task_context": state_manager.set_task_context,
+    "load_experiment_records":load_experiment_records, 
+    "run_experiment": run_experiment
 }
 
-def loop(text, max_steps=12):
+def loop(text, state, max_steps=12, hooks=None):
+    if hooks is None:
+        hooks = AgentHooks()
     messages = [
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": text}
@@ -511,7 +588,6 @@ def loop(text, max_steps=12):
         tool_calls = message.tool_calls
 
         #如果是工具调用
-        tool_calls = message.tool_calls
         if tool_calls:
             
             for tool_call in tool_calls:
@@ -521,20 +597,74 @@ def loop(text, max_steps=12):
                     tool_args = json.loads(tool_call.function.arguments)
                 except json.JSONDecodeError:
                     tool_args = {}
+                output = None
+                dispatch_error = None
+                hooks.before_tool_call(tool_function, tool_args)
 
                 handler = TOOL_HANDLERS.get(tool_function)
                 if handler:
-                    try:
-                        output = handler(**tool_args)
+                    if tool_function == "set_task_context":
+                        try:
+                            output = state_manager.set_task_context(state, **tool_args)
+                            output = f"Task context set successfully: {output}"
+                        except Exception as e:
+                            dispatch_error = {
+                                "type": "failed_to_set_context",
+                                "message": f"Failed to set task context: {e}."
+                            }
+                            output = dispatch_error["message"]
 
-                    except Exception as e:
-                        output = f"Error executing {tool_function}: {e}"
+                            
+                    elif tool_function == "run_experiment": 
+                            required_fields = [
+                                "script_path",
+                                "target_metric",
+                                "metric_direction"
+                            ]
+                            missing_fields = [field for field in required_fields if not state.get(field)]
+                            
+                            if missing_fields:
+                                dispatch_error = {
+                                    "type": "missing_task_context",
+                                    "message": "set_task_context must be called before running experiment."
+                                }
+                                output = dispatch_error["message"]
+                               
+                            else:
+                                output = handler(**tool_args)
+                                state = state_manager.update_state(state, output)
+                    else:
+                        try:
+                            output = handler(**tool_args)
+                        except Exception as e:
+                            dispatch_error = {
+                                "type": "handler_exception",
+                                "message": str(e)
+                            }
+                            output = f"Error executing {tool_function}: {e}"
                 else:
-                    output = f"Tool {tool_function} is not registered."
+                    dispatch_error = {
+                        "type": "unknown_tool",
+                        "message": f"Tool {tool_function} is not registered."
+                    }
+                    output = dispatch_error["message"]
+                
+                if dispatch_error is not None:
+                    hooks.on_tool_error(
+                        tool_function,
+                        tool_args,
+                        dispatch_error
+                    )
+                else:
+                    hooks.after_tool_call(
+                        tool_function,
+                        tool_args,
+                        output
+                    )
 
                 if not isinstance(output, str):
                     output = json.dumps(output, ensure_ascii=False)
-                
+                    
                 tool_trace.append({
                     "tool": tool_function,
                     "args": tool_args,
@@ -545,23 +675,29 @@ def loop(text, max_steps=12):
             return {
                 "final_answer": message.content,
                 "tool_trace": tool_trace,
-                "stopped_reason": "model_finished",
+                "hook_events": hooks.events,
+                "state": state,
                 "steps": step + 1
             }
 
     return {
         "final_answer": "Agent reached the maximum number of steps.",
         "tool_trace": tool_trace,
-        "stopped_reason": "max_steps",
+        "hook_events": hooks.events,
+        "state": state,
         "steps": max_steps
     }
 
 # 简单测试循环
 if __name__ == "__main__":
     while True:
+        task_id = uuid.uuid4().hex
         text = input("User: ")
+        current_state = state_manager.init_state(task_id, text)
+        state_manager.save_state(current_state)
+
         if text.lower() in ["exit", "quit"]:
             break
-        result = loop(text)
+        result = loop(text, state=current_state)
         print(f"Assistant: {result['final_answer']}")
         # print(json.dumps(result["tool_trace"], ensure_ascii=False, indent=2))

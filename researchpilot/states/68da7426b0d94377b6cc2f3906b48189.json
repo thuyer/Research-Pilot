@@ -1,0 +1,33 @@
+{
+  "task_id": "68da7426b0d94377b6cc2f3906b48189",
+  "user_prompt": "Please diagnose and run experiment_repo/accuracy_experiment.py. Use threshold=0.9 for the first run. The goal is to improve accuracy. If the result is not good, choose a more suitable threshold yourself and run it again; stop after success.",
+  "title": "accuracy_experiment_threshold_tuning",
+  "script_path": "experiment_repo/accuracy_experiment.py",
+  "target_metric": "accuracy",
+  "metric_direction": "max",
+  "runs": [
+    {
+      "run_id": "58e7b240e86e41d6b5bc8ae135d21e68",
+      "params": {
+        "threshold": 0.9
+      },
+      "metrics": {
+        "accuracy": 0.6
+      }
+    },
+    {
+      "run_id": "64f0506fc27d47a7b386bcc79cc4f731",
+      "params": {
+        "threshold": 0.5
+      },
+      "metrics": {
+        "accuracy": 0.9
+      }
+    }
+  ],
+  "failure_history": [],
+  "best_run_id": "64f0506fc27d47a7b386bcc79cc4f731",
+  "best_metric_value": 0.9,
+  "attempt_count": 2,
+  "updated_at": "2026-08-31 04:02:16"
+}

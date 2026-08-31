@@ -1,0 +1,27 @@
+{
+  "task_id": "da1125c60d5d4ca597d8dab7d3a1ef6d",
+  "user_prompt": "Run experiment_repo/runtime_error.py with its default parameters. If a runtime error occurs, diagnose it from the result and stop. Do not modify the script.",
+  "title": "runtime_error_diagnosis",
+  "script_path": "experiment_repo/runtime_error.py",
+  "target_metric": "status",
+  "metric_direction": "max",
+  "runs": [
+    {
+      "run_id": "57bedc5cdc15497299c1b4d9a93206be",
+      "params": {},
+      "metrics": {}
+    }
+  ],
+  "failure_history": [
+    {
+      "run_id": "57bedc5cdc15497299c1b4d9a93206be",
+      "params": {},
+      "failure_type": "runtime_error",
+      "reason": "RuntimeError: Synthetic runtime failure: invalid experiment configuration"
+    }
+  ],
+  "best_run_id": null,
+  "best_metric_value": null,
+  "attempt_count": 1,
+  "updated_at": "2026-08-31 04:06:32"
+}

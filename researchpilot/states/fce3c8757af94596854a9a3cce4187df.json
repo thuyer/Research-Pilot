@@ -1,0 +1,40 @@
+{
+  "task_id": "fce3c8757af94596854a9a3cce4187df",
+  "user_prompt": "Please diagnose and run experiment_repo/train.py. Use lr=0.1 for the first run. Based on the experiment result, decide whether to adjust the parameters yourself. If training fails, choose new parameters and validate them; stop after success.",
+  "title": "train_lr_tuning",
+  "script_path": "experiment_repo/train.py",
+  "target_metric": "loss",
+  "metric_direction": "min",
+  "runs": [
+    {
+      "run_id": "c22166c08e6a4892ada7006faf3bae55",
+      "params": {
+        "lr": 0.1
+      },
+      "metrics": {}
+    },
+    {
+      "run_id": "edb9eb5fe13b418ab94a018474f9cf00",
+      "params": {
+        "lr": 0.001
+      },
+      "metrics": {
+        "loss": 1.0
+      }
+    }
+  ],
+  "failure_history": [
+    {
+      "run_id": "c22166c08e6a4892ada7006faf3bae55",
+      "params": {
+        "lr": 0.1
+      },
+      "failure_type": "nan_or_inf",
+      "reason": "Loss became NaN during training."
+    }
+  ],
+  "best_run_id": "edb9eb5fe13b418ab94a018474f9cf00",
+  "best_metric_value": 1.0,
+  "attempt_count": 2,
+  "updated_at": "2026-08-31 04:01:22"
+}

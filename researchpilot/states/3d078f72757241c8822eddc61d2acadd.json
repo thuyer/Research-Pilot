@@ -1,0 +1,14 @@
+{
+  "task_id": "3d078f72757241c8822eddc61d2acadd",
+  "user_prompt": "请运行 experiment_repo/non_existing_train.py。如果脚本不存在，请说明原因并立即停止，不要尝试运行其他脚本。",
+  "title": null,
+  "script_path": null,
+  "target_metric": null,
+  "metric_direction": null,
+  "runs": [],
+  "failure_history": [],
+  "best_run_id": null,
+  "best_metric_value": null,
+  "attempt_count": 0,
+  "updated_at": "2026-08-31 03:52:09"
+}

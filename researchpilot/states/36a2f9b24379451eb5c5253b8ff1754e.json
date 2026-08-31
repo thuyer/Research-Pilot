@@ -1,0 +1,24 @@
+{
+  "task_id": "36a2f9b24379451eb5c5253b8ff1754e",
+  "user_prompt": "Run experiment_repo/train.py with lr=0.001. Observe the result and stop immediately after it completes normally. Do not run it again or try other parameters.",
+  "title": "train_simulation",
+  "script_path": "experiment_repo/train.py",
+  "target_metric": "loss",
+  "metric_direction": "min",
+  "runs": [
+    {
+      "run_id": "0e48b441f5a5479890fabe14a3e0b1be",
+      "params": {
+        "lr": 0.001
+      },
+      "metrics": {
+        "loss": 1.0
+      }
+    }
+  ],
+  "failure_history": [],
+  "best_run_id": "0e48b441f5a5479890fabe14a3e0b1be",
+  "best_metric_value": 1.0,
+  "attempt_count": 1,
+  "updated_at": "2026-08-31 04:06:18"
+}

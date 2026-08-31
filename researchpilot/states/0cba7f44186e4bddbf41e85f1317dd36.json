@@ -1,0 +1,27 @@
+{
+  "task_id": "0cba7f44186e4bddbf41e85f1317dd36",
+  "user_prompt": "Run experiment_repo/timeout_experiment.py with timeout_seconds=1. If the experiment times out, explain the reason and stop; do not run it again.",
+  "title": "timeout_experiment_run",
+  "script_path": "experiment_repo/timeout_experiment.py",
+  "target_metric": "completion",
+  "metric_direction": "max",
+  "runs": [
+    {
+      "run_id": "54dcdaf8c6154eb1bfb626f54ce1b9ba",
+      "params": {},
+      "metrics": {}
+    }
+  ],
+  "failure_history": [
+    {
+      "run_id": "54dcdaf8c6154eb1bfb626f54ce1b9ba",
+      "params": {},
+      "failure_type": "timeout",
+      "reason": "Execution Timed Out"
+    }
+  ],
+  "best_run_id": null,
+  "best_metric_value": null,
+  "attempt_count": 1,
+  "updated_at": "2026-08-31 04:02:02"
+}

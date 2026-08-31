@@ -1,0 +1,33 @@
+{
+  "task_id": "6ed4cd938088457d9ce5b549c1370bcd",
+  "user_prompt": "请诊断并运行 experiment_repo/accuracy_experiment.py。第一次使用 threshold=0.9。目标是提高 accuracy；如果结果不理想，请根据结果自行选择更合适的 threshold 重新运行，成功后停止。",
+  "title": "accuracy_experiment_threshold_tuning",
+  "script_path": "experiment_repo/accuracy_experiment.py",
+  "target_metric": "accuracy",
+  "metric_direction": "max",
+  "runs": [
+    {
+      "run_id": "55b73aec1e374241b4d77e8237bc4a67",
+      "params": {
+        "threshold": 0.9
+      },
+      "metrics": {
+        "accuracy": 0.6
+      }
+    },
+    {
+      "run_id": "5094125a8ae64a99827fc77d44e312d3",
+      "params": {
+        "threshold": 0.5
+      },
+      "metrics": {
+        "accuracy": 0.9
+      }
+    }
+  ],
+  "failure_history": [],
+  "best_run_id": "5094125a8ae64a99827fc77d44e312d3",
+  "best_metric_value": 0.9,
+  "attempt_count": 2,
+  "updated_at": "2026-08-31 03:52:45"
+}

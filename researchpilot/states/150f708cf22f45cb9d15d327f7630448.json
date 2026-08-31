@@ -1,0 +1,24 @@
+{
+  "task_id": "150f708cf22f45cb9d15d327f7630448",
+  "user_prompt": "请运行 experiment_repo/train.py，使用 lr=0.001。观察结果，正常完成后立即停止，不要重复运行。",
+  "title": "train_simulation",
+  "script_path": "experiment_repo/train.py",
+  "target_metric": "loss",
+  "metric_direction": "min",
+  "runs": [
+    {
+      "run_id": "c91801fc9c1049e687856c47c87334ac",
+      "params": {
+        "lr": 0.001
+      },
+      "metrics": {
+        "loss": 1.0
+      }
+    }
+  ],
+  "failure_history": [],
+  "best_run_id": "c91801fc9c1049e687856c47c87334ac",
+  "best_metric_value": 1.0,
+  "attempt_count": 1,
+  "updated_at": "2026-08-31 03:52:08"
+}

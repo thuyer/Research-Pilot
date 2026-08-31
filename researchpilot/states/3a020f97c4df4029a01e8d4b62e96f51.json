@@ -1,0 +1,27 @@
+{
+  "task_id": "3a020f97c4df4029a01e8d4b62e96f51",
+  "user_prompt": "请运行 experiment_repo/timeout_experiment.py，并将 timeout_seconds 设置为 1。如果实验超时，请说明原因并停止，不要重复运行。",
+  "title": "timeout_experiment_timeout_test",
+  "script_path": "experiment_repo/timeout_experiment.py",
+  "target_metric": "completion",
+  "metric_direction": "max",
+  "runs": [
+    {
+      "run_id": "b71e265f473444969d03516217770b2e",
+      "params": {},
+      "metrics": {}
+    }
+  ],
+  "failure_history": [
+    {
+      "run_id": "b71e265f473444969d03516217770b2e",
+      "params": {},
+      "failure_type": "timeout",
+      "reason": "Execution Timed Out."
+    }
+  ],
+  "best_run_id": null,
+  "best_metric_value": null,
+  "attempt_count": 1,
+  "updated_at": "2026-08-31 03:52:33"
+}

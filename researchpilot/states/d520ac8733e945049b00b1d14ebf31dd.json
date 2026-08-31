@@ -1,0 +1,40 @@
+{
+  "task_id": "d520ac8733e945049b00b1d14ebf31dd",
+  "user_prompt": "请诊断并运行 experiment_repo/train.py。第一次请使用 lr=0.1。根据实验结果自行决定是否调整参数；如果训练失败，请选择新的参数重新验证，成功后停止。",
+  "title": "train_lr_tuning",
+  "script_path": "experiment_repo/train.py",
+  "target_metric": "loss",
+  "metric_direction": "min",
+  "runs": [
+    {
+      "run_id": "89a3805245044c3981465fb17ef2f117",
+      "params": {
+        "lr": 0.1
+      },
+      "metrics": {}
+    },
+    {
+      "run_id": "a4afa99a64fc46f9b8cc65c3e53c3fba",
+      "params": {
+        "lr": 0.001
+      },
+      "metrics": {
+        "loss": 1.0
+      }
+    }
+  ],
+  "failure_history": [
+    {
+      "run_id": "89a3805245044c3981465fb17ef2f117",
+      "params": {
+        "lr": 0.1
+      },
+      "failure_type": "nan_or_inf",
+      "reason": "Loss value became NaN during training."
+    }
+  ],
+  "best_run_id": "a4afa99a64fc46f9b8cc65c3e53c3fba",
+  "best_metric_value": 1.0,
+  "attempt_count": 2,
+  "updated_at": "2026-08-31 03:51:58"
+}

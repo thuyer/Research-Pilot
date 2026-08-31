@@ -1,0 +1,27 @@
+{
+  "task_id": "7ca6b2ab0bba4c86802f76ad005ef38b",
+  "user_prompt": "Call run_experiment exactly once for experiment_repo/non_existing_train.py to test the tool's path validation. Even though the file does not exist, the tool must be called and allowed to return its rejected result. After receiving rejected, explain the reason and stop; do not try another script.",
+  "title": "path_validation_test",
+  "script_path": "experiment_repo/non_existing_train.py",
+  "target_metric": "accuracy",
+  "metric_direction": "max",
+  "runs": [
+    {
+      "run_id": "cde5e8d1f8ce4bc9a0843c16578617f7",
+      "params": {},
+      "metrics": {}
+    }
+  ],
+  "failure_history": [
+    {
+      "run_id": "cde5e8d1f8ce4bc9a0843c16578617f7",
+      "params": {},
+      "failure_type": "rejected",
+      "reason": "The file doesn't exit."
+    }
+  ],
+  "best_run_id": null,
+  "best_metric_value": null,
+  "attempt_count": 1,
+  "updated_at": "2026-08-31 04:01:41"
+}
